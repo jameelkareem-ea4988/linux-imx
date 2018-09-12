@@ -44,6 +44,7 @@
 		compatible = "gpio-reset";
 		reset-gpios = <&gpio_buff 0 GPIO_ACTIVE_LOW>;
 		reset-delay-us = <1000>;
+//		initially-in-reset; 
 		#reset-cells = <0>;
 	};
 
@@ -86,6 +87,26 @@
 	};
 };
 
+&aips1 {
+	gpio1: gpio@0209c000 {
+		/* Murata - This hog forces SD1_VSELECT high; SD1 VIO = 1.8V */
+		sd1_vselect-gpio {
+		gpio-hog;
+		gpios = <5 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "SD1 VSELECT";
+		};
+	};
+	gpio1: gpio@0209c000 {
+		/* Murata - This hog forces BT_HOST_WAKE high; necessary for BT HCI UART Initialization */
+		bt_host_wake-gpio {
+		gpio-hog;
+		gpios = <2 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "BT_HOST_WAKE";	
+		};
+	};
+};
 
 &clks {
 	assigned-clocks = <&clks IMX6UL_CLK_PLL4_AUDIO_DIV>;
@@ -197,7 +218,6 @@
 	status = "okay";
 };
 
-
 &usdhc1 {
 	#address-cells = <1>;
 	#size-cells = <0>;
@@ -205,25 +225,27 @@
 	pinctrl-0 = <&pinctrl_usdhc1>;
 	pinctrl-1 = <&pinctrl_usdhc1_100mhz>;
 	pinctrl-2 = <&pinctrl_usdhc1_200mhz>;
-//	cd-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
-	enable-sdio-wakeup;
-	fsl,tuning-start-tap = <20>;	/* Murata: i.MX default tuning-start-tap */
-	fsl,tuning-step= <2>;		/* Murata: change default step value from 2 to 4 for 1BB */
+//	wakeup-source;  /* Murata: not required given OOB IRQ configuration */
 	keep-power-in-suspend;
 	non-removable;
-	cd-broken;
-	pm-ignore-notify;
-	wifi-host;
-	status = "okay";
-	no-1-8-v;	/* Murata: enable 1.8V VIO for SD1 by disabling 3.3V-only mode */
-	max-frequency = <104000000>; /* slow down UHS SDR104 clock */
 	mmc-pwrseq = <&usdhc1_pwrseq>;
+//	fsl,tuning-start-tap = <20>; /* Murata: default is 20 */
+	fsl,tuning-step = <2>;  /* Murata: default is 2 */
+//	fsl,delay-line = 0; 	/* Murata: default value, used to handle longer SDIO traces -- check into. */
+	pm-ignore-notify;
+//	cap-power-off-card;
+	status = "okay";
+//	no-1-8-v;  /* Murata: use to disable UHS negotation -- needed to reconfigure Type 1LV */
+	max-frequency = <104000000>; /* slow down UHS SDR104 clock */
+
 	brcmf: bcrmf@1 {
 		reg = <1>;
 		compatible = "brcm,bcm4329-fmac";
 		interrupt-parent = <&gpio1>;
 		interrupts = <1 IRQ_TYPE_LEVEL_HIGH>;  /* WL_HOST_WAKE = GPIO1_IO01 active high. Change to IRQ_TYPE_EDGE_RISING for 1BW and SN8000. */
 		interrupt-names = "host-wake";
+		brcm,broken_sg_support;
+		brcm,sd_sgentry_align =/bits/ 16 <16>;
 	};
 };
 
@@ -333,7 +355,7 @@
 		hog_VDDIO_VSEL {
 			gpio-hog;
 			gpios = <6 0>;
-			output-low;
+			output-low;  /* 1.8V VDDIO */
 		};
 		hog_SD_MUX_CTRL1 {
 			gpio-hog;
@@ -353,7 +375,7 @@
 		hog_VBAT_VSEL {
 			gpio-hog;
 			gpios = <14 0>;
-			output-high;
+			output-high;  /* 3.6V VBAT */
 		};
 	};
 };

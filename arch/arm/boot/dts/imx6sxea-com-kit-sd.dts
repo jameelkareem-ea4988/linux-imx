@@ -38,7 +38,8 @@
 		compatible = "gpio-reset";
 		reset-gpios = <&gpio_buff 0 GPIO_ACTIVE_LOW>;
 		reset-delay-us = <1000>;
-		#reset-cells = <0>;
+//		initially-in-reset;
+		#reset-cells = <0>; 
 	};
 
 	backlight_lvds: backlight1 {
@@ -144,6 +145,18 @@
 		audio-routing = "LOUT", "ROUT", "LLINEIN", "RLINEIN";
 	};
 
+};
+
+&aips1 {
+	gpio6: gpio@020b0000 {
+		/* Murata - This hog forces BT_HOST_WAKE high; necessary for BT HCI UART Initialization */
+		bt_host_wake-gpio {
+		gpio-hog;
+		gpios = <1 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "BT_HOST_WAKE";	
+		};
+	};
 };
 
 &audmux {
@@ -316,11 +329,11 @@
 &uart2 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart2>;
-	status = "okay";
-
 	fsl,uart-has-rtscts;
-	#fsl,irda-mode;
-	#fsl,dte-mode;
+	resets = <&modem_reset>;
+	status = "okay";
+        #fsl,irda-mode;
+        #fsl,dte-mode;
 };
 
 &uart5 {
@@ -343,30 +356,32 @@
 };
 
 &usdhc2 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_usdhc2>;
-
 	#address-cells = <1>;
 	#size-cells = <0>;
-//	cd-gpios = <&gpio2 16 GPIO_ACTIVE_LOW>;
-	fsl,tuning-start-tap = <20>;	/* Murata: i.MX default tuning-start-tap */
-	fsl,tuning-step= <2>;		/* Murata: change default step value from 2 to 4 for 1BB */
-	enable-sdio-wakeup;
+	pinctrl-names = "default", "state_100mhz", "state_200mhz";
+	pinctrl-0 = <&pinctrl_usdhc2>;
+	pinctrl-1 = <&pinctrl_usdhc2_100mhz>;
+	pinctrl-2 = <&pinctrl_usdhc2_200mhz>;
+//	wakeup-source;  /* Murata: not required given OOB IRQ configuration */
 	keep-power-in-suspend;
 	non-removable;
-	cd-broken;
-	pm-ignore-notify;
-	wifi-host;
-	status = "okay";
-	no-1-8-v;	/* Murata: enable 1.8V VIO for SD1 by disabling 3.3V-only mode */
-	max-frequency = <104000000>; /* slow down UHS SDR104 clock */
 	mmc-pwrseq = <&usdhc2_pwrseq>;
+	fsl,tuning-start-tap = <20>; /* Murata: default is not 20 for SX -- check into. This value fixes "std tuning" */
+	fsl,tuning-step = <1>;  /* Murata: default is 1 */
+//	fsl,delay-line = 0; 	/* Murata: default value, used to handle longer SDIO traces -- check into. */
+	pm-ignore-notify;
+//	cap-power-off-card;
+	status = "okay";
+//	no-1-8-v;  /* 3.3V VIO only on SoloX SDIO interface */
+	max-frequency = <104000000>; /* slow down UHS SDR104 clock */
 	brcmf: bcrmf@1 {
 		reg = <1>;
 		compatible = "brcm,bcm4329-fmac";
 		interrupt-parent = <&gpio6>;
 		interrupts = <0 IRQ_TYPE_LEVEL_HIGH>;  /* WL_HOST_WAKE = GPIO6_IO00 active high. Change to IRQ_TYPE_EDGE_RISING for 1BW and SN8000. */
 		interrupt-names = "host-wake";
+		brcm,broken_sg_support;
+		brcm,sd_sgentry_align =/bits/ 16 <16>;
 	};
 };
 
@@ -547,7 +562,7 @@
 		hog_VDDIO_VSEL {
 			gpio-hog;
 			gpios = <6 0>;
-			output-low;
+			output-high;  /* 3.3V VIO */
 		};
 		hog_SD_MUX_CTRL1 {
 			gpio-hog;
@@ -567,7 +582,7 @@
 		hog_VBAT_VSEL {
 			gpio-hog;
 			gpios = <14 0>; /* Possible conflict with SATA which needs this low */
-			output-high;
+			output-high;  /* 3.6V VBAT */
 		};
 	};
 };
@@ -583,7 +598,7 @@
 	};
 };
 
-&iomuxc {
+&iomuxc {  
 	pinctrl-0 = <&pinctrl_lcdif_ctrl>;
 
 	imx6xea-com-kit {
@@ -728,16 +743,15 @@
 				MX6SX_PAD_SD1_DATA0__UART2_RX		0x1b0b1
 				MX6SX_PAD_SD1_DATA3__UART2_RTS_B	0x1b0b1
 				MX6SX_PAD_SD1_DATA2__UART2_CTS_B	0x1b0b1
+                                /* RF_ON - Not Connected */
+                                /* RF_CD */
+                                MX6SX_PAD_GPIO1_IO06__GPIO1_IO_6        0x1b0b1
 
-				/* RF_ON - Not Connected */
-				/* RF_CD */
-				MX6SX_PAD_GPIO1_IO06__GPIO1_IO_6	0x1b0b1
+                                /* RF_DTR */
+                                MX6SX_PAD_GPIO1_IO07__GPIO1_IO_7        0x1b0b1
 
-				/* RF_DTR */
-				MX6SX_PAD_GPIO1_IO07__GPIO1_IO_7	0x1b0b1
-
-				/* RF_RST */
-				MX6SX_PAD_CSI_DATA02__GPIO1_IO_16	0x1b0b1
+                                /* RF_RST */
+                                MX6SX_PAD_CSI_DATA02__GPIO1_IO_16       0x1b0b1
 			>;
 		};
 
@@ -769,13 +783,35 @@
 
 		pinctrl_usdhc2: usdhc2grp {
 			fsl,pins = <
-				MX6SX_PAD_SD2_CMD__USDHC2_CMD		0x17059
-				MX6SX_PAD_SD2_CLK__USDHC2_CLK		0x10059
-				MX6SX_PAD_SD2_DATA0__USDHC2_DATA0	0x17059
-				MX6SX_PAD_SD2_DATA1__USDHC2_DATA1	0x17059
-				MX6SX_PAD_SD2_DATA2__USDHC2_DATA2	0x17059
-				MX6SX_PAD_SD2_DATA3__USDHC2_DATA3	0x17059
-				MX6SX_PAD_SD1_CLK__GPIO6_IO_0		0x17059 /* WL_HOST_WAKE */
+				MX6SX_PAD_SD2_CMD__USDHC2_CMD		0x17069  /* Murata - default is 0x17059 including data lines */  
+				MX6SX_PAD_SD2_CLK__USDHC2_CLK		0x10071  /* Murata - default is 0x10059 */
+				MX6SX_PAD_SD2_DATA0__USDHC2_DATA0	0x17069
+				MX6SX_PAD_SD2_DATA1__USDHC2_DATA1	0x17069
+				MX6SX_PAD_SD2_DATA2__USDHC2_DATA2	0x17069
+				MX6SX_PAD_SD2_DATA3__USDHC2_DATA3	0x17069
+				MX6SX_PAD_SD1_CLK__GPIO6_IO_0		0x13059 /* WL_HOST_WAKE */
+			>;
+		};
+
+		pinctrl_usdhc2_100mhz: usdhc2grp-100mhz {
+			fsl,pins = <
+				MX6SX_PAD_SD2_CMD__USDHC2_CMD		0x170b9
+				MX6SX_PAD_SD2_CLK__USDHC2_CLK		0x100b9
+				MX6SX_PAD_SD2_DATA0__USDHC2_DATA0	0x170b9
+				MX6SX_PAD_SD2_DATA1__USDHC2_DATA1	0x170b9
+				MX6SX_PAD_SD2_DATA2__USDHC2_DATA2	0x170b9
+				MX6SX_PAD_SD2_DATA3__USDHC2_DATA3	0x170b9
+			>;
+		};
+
+		pinctrl_usdhc2_200mhz: usdhc2grp-200mhz {
+			fsl,pins = <
+				MX6SX_PAD_SD2_CMD__USDHC2_CMD		0x170f9
+				MX6SX_PAD_SD2_CLK__USDHC2_CLK		0x100f9
+				MX6SX_PAD_SD2_DATA0__USDHC2_DATA0	0x170f9
+				MX6SX_PAD_SD2_DATA1__USDHC2_DATA1	0x170f9
+				MX6SX_PAD_SD2_DATA2__USDHC2_DATA2	0x170f9
+				MX6SX_PAD_SD2_DATA3__USDHC2_DATA3	0x170f9
 			>;
 		};
 	};

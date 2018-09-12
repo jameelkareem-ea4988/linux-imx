@@ -46,8 +46,10 @@
 		compatible = "gpio-reset";
 		reset-gpios = <&gpio_buff 0 GPIO_ACTIVE_LOW>;
 		reset-delay-us = <1000>;
+//		initially-in-reset; 
 		#reset-cells = <0>;
 	};
+
 	regulators {
 		compatible = "simple-bus";
 		#address-cells = <1>;
@@ -104,18 +106,8 @@
 			regulator-name = "VDD_SD1";
 			regulator-min-microvolt = <3300000>;
 			regulator-max-microvolt = <3300000>;
-			/* gpio = <&gpio5 2 GPIO_ACTIVE_HIGH>; */
 			enable-active-high;
 			startup-delay-us = <200000>;
-		};
-
-		wlreg_on: fixedregulator@100 {
-			compatible = "regulator-fixed";
-			regulator-min-microvolt = <5000000>;
-			regulator-max-microvolt = <5000000>;
-			regulator-name = "wlreg_on";
-			gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
-			enable-active-high;
 		};
 	};
 
@@ -486,17 +478,17 @@
 		hog_SD_PCIE_MUX_CTRL {
 			gpio-hog;
 			gpios = <5 0>;
-			output-low;
+			output-low;  /* select WLAN PCIe interface for Samtec connector (J23) */
 		};
-//		hog_VDDIO_VSEL {
-//			gpio-hog;
-//			gpios = <6 0>;
-//			output-high; /* Set default VIO to 1.8V (high only for PE9, change to low for PE10+) */
-//		};
+		hog_VDDIO_VSEL {
+			gpio-hog;
+			gpios = <6 0>;
+			output-low; /* Set default VIO to 1.8V (high only for PE9, change to low for PE10+) */
+		};
 		hog_PCIE_CLK_MUX_CTRL {
 			gpio-hog;
 			gpios = <7 0>;
-			output-low;
+			output-high;
 		};
 		hog_PCIE_SLOT_MUX_CTRL {
 			gpio-hog;
@@ -506,12 +498,17 @@
 		hog_AUD_CODEC_MUX_CTRL1 {
 			gpio-hog;
 			gpios = <10 0>;
-			output-high;
+			output-low;
 		};
 		hog_AUD_CODEC_MUX_CTRL2 {
 			gpio-hog;
 			gpios = <11 0>;
-			output-high;
+			output-low;
+		};
+		hog_VBAT_VSEL {
+			gpio-hog;
+			gpios = <14 0>;
+			output-high;  /* output high for 3.6V VBAT */
 		};
 	};
 };
@@ -540,7 +537,8 @@
 		pinctrl_hog_1: hoggrp-1 {
 			fsl,pins = <
 				MX7D_PAD_UART3_CTS_B__GPIO4_IO7	0x14
-				MX7D_PAD_GPIO1_IO08__SD1_VSELECT        0x33 /* Murata: 5K pullup - MAX drive strength for SD1_VSELECT */
+				MX7D_PAD_GPIO1_IO08__GPIO1_IO8		0x0B /* Murata - VSELECT for WLAN SDIO interface */
+				MX7D_PAD_EPDC_SDCE1__GPIO2_IO21		0x19 /* Murata - BT_HOST_WAKE; 100K pulldown */
 				MX7D_PAD_EPDC_DATA14__GPIO2_IO14        0x59 /* CAN_STBY */
 				MX7D_PAD_GPIO1_IO09__GPIO1_IO9          0x59 /* PMIC_INT_B */
 			>;
@@ -558,7 +556,7 @@
                                 MX7D_PAD_EPDC_GDRL__GPIO2_IO26          0x1f0b0
                         >;
                 };
-
+/*
                 pinctrl_epdc0: epdcgrp0 {
                         fsl,pins = <
 				MX7D_PAD_EPDC_DATA00__EPDC_DATA0  0x2
@@ -582,7 +580,7 @@
 				MX7D_PAD_EPDC_SDOE__EPDC_SDOE     0x2
 				MX7D_PAD_EPDC_SDSHR__EPDC_SDSHR   0x2
 				MX7D_PAD_EPDC_SDCE0__EPDC_SDCE0   0x2
-				MX7D_PAD_EPDC_SDCE1__EPDC_SDCE1   0x2
+				MX7D_PAD_EPDC_SDCE1__EPDC_SDCE1   0x2  -- Murata: conflict with BT_HOST_WAKE
 				MX7D_PAD_EPDC_GDCLK__EPDC_GDCLK   0x2
 				MX7D_PAD_EPDC_GDOE__EPDC_GDOE     0x2
 				MX7D_PAD_EPDC_GDRL__EPDC_GDRL     0x2
@@ -591,6 +589,7 @@
 				MX7D_PAD_EPDC_BDR1__EPDC_BDR1     0x2
                         >;
                 };
+*/
 
 		pinctrl_enet1: enet1grp {
 			fsl,pins = <
@@ -623,7 +622,7 @@
 			fsl,pins = <
 				MX7D_PAD_SAI2_TX_SYNC__ECSPI3_MISO	0x2
 				MX7D_PAD_SAI2_TX_BCLK__ECSPI3_MOSI	0x2
-				MX7D_PAD_SAI2_RX_DATA__ECSPI3_SCLK	0x2
+//				MX7D_PAD_SAI2_RX_DATA__ECSPI3_SCLK	0x2   /* Murata -- conflict with UART */
 			>;
 		};
 
@@ -890,6 +889,18 @@
 	};
 };
 
+&aips1 {
+	gpio2: gpio@30210000 {
+		/* Murata - This hog forces BT_HOST_WAKE high; necessary for BT HCI UART Initialization */
+		bt_host_wake-gpio {
+		gpio-hog;
+		gpios = <21 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "BT_HOST_WAKE";	
+		};
+	};
+};
+
 &iomuxc_lpsr {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hog_2>;
@@ -1003,14 +1014,15 @@
 
 /* Bluetooth UART */
 &uart2 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_uart2>;
-	assigned-clocks = <&clks IMX7D_UART2_ROOT_SRC>;
-	assigned-clock-parents = <&clks IMX7D_OSC_24M_CLK>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_uart2>;
+        assigned-clocks = <&clks IMX7D_UART2_ROOT_SRC>;
+        assigned-clock-parents = <&clks IMX7D_PLL_SYS_MAIN_240M_CLK>;
 	fsl,uart-has-rtscts;
 	resets = <&modem_reset>;
 	status = "okay";
 };
+
 &uart3 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart3>;

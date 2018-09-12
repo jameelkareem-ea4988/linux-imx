@@ -46,8 +46,10 @@
 		compatible = "gpio-reset";
 		reset-gpios = <&gpio_buff 0 GPIO_ACTIVE_LOW>;
 		reset-delay-us = <1000>;
+//		initially-in-reset; 
 		#reset-cells = <0>;
 	};
+
 	regulators {
 		compatible = "simple-bus";
 		#address-cells = <1>;
@@ -474,12 +476,12 @@
 		hog_SD_PCIE_MUX_CTRL {
 			gpio-hog;
 			gpios = <5 0>;
-			output-high;
+			output-high;  /* select WLAN SDIO interface for Samtec connector (J23) */
 		};
 		hog_VDDIO_VSEL {
 			gpio-hog;
 			gpios = <6 0>;
-			output-low;
+			output-low; /* Set default VIO to 1.8V (high only for PE9, change to low for PE10+) */
 		};
 		hog_SD_MUX_CTRL1 {
 			gpio-hog;
@@ -489,12 +491,17 @@
 		hog_AUD_CODEC_MUX_CTRL1 {
 			gpio-hog;
 			gpios = <10 0>;
-			output-high;
+			output-low;
 		};
 		hog_AUD_CODEC_MUX_CTRL2 {
 			gpio-hog;
 			gpios = <11 0>;
-			output-high;
+			output-low;
+		};
+		hog_SD_MUX_CTRL2 {
+			gpio-hog;
+			gpios = <13 0>;
+			output-high; /* Murata: disable output to SD card connector */
 		};
 		hog_VBAT_VSEL {
 			gpio-hog;
@@ -528,7 +535,8 @@
 		pinctrl_hog_1: hoggrp-1 {
 			fsl,pins = <
 				MX7D_PAD_UART3_CTS_B__GPIO4_IO7	0x14
-				MX7D_PAD_GPIO1_IO08__GPIO1_IO8		0x59 /* Murata: select SD1 VIO */
+				MX7D_PAD_GPIO1_IO08__GPIO1_IO8		0x0B /* Murata - VSELECT for WLAN SDIO interface */
+				MX7D_PAD_EPDC_SDCE1__GPIO2_IO21		0x19 /* Murata - BT_HOST_WAKE; 100K pulldown */
 				MX7D_PAD_EPDC_SDCE3__GPIO2_IO23         0x59
 				MX7D_PAD_EPDC_DATA14__GPIO2_IO14        0x59 /* CAN_STBY */
 				MX7D_PAD_GPIO1_IO09__GPIO1_IO9          0x59 /* PMIC_INT_B */
@@ -548,6 +556,7 @@
                         >;
                 };
 
+/*
                 pinctrl_epdc0: epdcgrp0 {
                         fsl,pins = <
 				MX7D_PAD_EPDC_DATA00__EPDC_DATA0  0x2
@@ -571,7 +580,7 @@
 				MX7D_PAD_EPDC_SDOE__EPDC_SDOE     0x2
 				MX7D_PAD_EPDC_SDSHR__EPDC_SDSHR   0x2
 				MX7D_PAD_EPDC_SDCE0__EPDC_SDCE0   0x2
-				MX7D_PAD_EPDC_SDCE1__EPDC_SDCE1   0x2
+				MX7D_PAD_EPDC_SDCE1__EPDC_SDCE1   0x2  -- Murata: conflict with BT_HOST_WAKE
 				MX7D_PAD_EPDC_GDCLK__EPDC_GDCLK   0x2
 				MX7D_PAD_EPDC_GDOE__EPDC_GDOE     0x2
 				MX7D_PAD_EPDC_GDRL__EPDC_GDRL     0x2
@@ -580,6 +589,7 @@
 				MX7D_PAD_EPDC_BDR1__EPDC_BDR1     0x2
                         >;
                 };
+*/
 
 		pinctrl_enet1: enet1grp {
 			fsl,pins = <
@@ -612,7 +622,7 @@
 			fsl,pins = <
 				MX7D_PAD_SAI2_TX_SYNC__ECSPI3_MISO	0x2
 				MX7D_PAD_SAI2_TX_BCLK__ECSPI3_MOSI	0x2
-				MX7D_PAD_SAI2_RX_DATA__ECSPI3_SCLK	0x2
+//				MX7D_PAD_SAI2_RX_DATA__ECSPI3_SCLK	0x2   /* Murata -- conflict with UART */
 			>;
 		};
 
@@ -731,7 +741,7 @@
 				MX7D_PAD_SD1_DATA1__SD1_DATA1	0x59
 				MX7D_PAD_SD1_DATA2__SD1_DATA2	0x59
 				MX7D_PAD_SD1_DATA3__SD1_DATA3	0x59
-				MX7D_PAD_EPDC_SDCE0__GPIO2_IO20		0x59 /* WL_HOST_WAKE */
+				MX7D_PAD_EPDC_SDCE0__GPIO2_IO20	0x19 /* WL_HOST_WAKE */
 			>;
 		};
 
@@ -875,9 +885,29 @@
 				MX7D_PAD_EPDC_DATA06__QSPI_A_SS0_B 0x51
 			>;
 		};
-
 	};
 };
+
+&aips1 {
+	gpio1: gpio@30200000 {
+		/* Murata - This hog forces SD1_VSELECT high; SD1 VIO = 1.8V */
+		sd1_vselect-gpio {
+		gpio-hog;
+		gpios = <8 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "SD1 VSELECT";
+		};
+	};
+	gpio2: gpio@30210000 {
+		/* Murata - This hog forces BT_HOST_WAKE high; necessary for BT HCI UART Initialization */
+		bt_host_wake-gpio {
+		gpio-hog;
+		gpios = <21 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "BT_HOST_WAKE";	
+		};
+	};
+}; 
 
 &iomuxc_lpsr {
 	pinctrl-names = "default";
@@ -992,14 +1022,15 @@
 
 /* Bluetooth UART */
 &uart2 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_uart2>;
-	assigned-clocks = <&clks IMX7D_UART2_ROOT_SRC>;
-	assigned-clock-parents = <&clks IMX7D_OSC_24M_CLK>;
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_uart2>;
+        assigned-clocks = <&clks IMX7D_UART2_ROOT_SRC>;
+        assigned-clock-parents = <&clks IMX7D_PLL_SYS_MAIN_240M_CLK>;
 	fsl,uart-has-rtscts;
 	resets = <&modem_reset>;
 	status = "okay";
 };
+
 &uart3 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart3>;
@@ -1030,25 +1061,27 @@
 	pinctrl-0 = <&pinctrl_usdhc1>;
 	pinctrl-1 = <&pinctrl_usdhc1_100mhz>;
 	pinctrl-2 = <&pinctrl_usdhc1_200mhz>;
-//	cd-gpios = <&gpio5 0 GPIO_ACTIVE_LOW>;
-	fsl,tuning-start-tap = <20>;	/* Murata: i.MX default tuning-start-tap */
-	fsl,tuning-step= <2>;		/* Murata: change default step value from 2 to 4 for 1BB */
-	enable-sdio-wakeup;
+//	wakeup-source;  /* Murata: not required given OOB IRQ configuration */
 	keep-power-in-suspend;
 	non-removable;
-	cd-broken;
-	pm-ignore-notify;
-	wifi-host;
-	status = "okay";
-	no-1-8-v;	/* Murata: enable 1.8V VIO for SD1 by disabling 3.3V-only mode */
-//	max-frequency = <104000000>; /* slow down UHS SDR104 clock */
 	mmc-pwrseq = <&usdhc1_pwrseq>;
+//	fsl,tuning-start-tap = <20>; /* Murata: default is 20 */
+	fsl,tuning-step = <4>;  /* Murata: default is 2 */
+//	fsl,delay-line = 0; 	/* Murata: default value, used to handle longer SDIO traces -- check into. */
+	pm-ignore-notify;
+//	cap-power-off-card;
+	status = "okay";
+//	no-1-8-v;  /* Murata: use to disable UHS negotation -- needed to reconfigure Type 1LV */
+	max-frequency = <104000000>; /* slow down UHS SDR104 clock */
+
 	brcmf: bcrmf@1 {
 		reg = <1>;
 		compatible = "brcm,bcm4329-fmac";
 		interrupt-parent = <&gpio2>;
 		interrupts = <20 IRQ_TYPE_LEVEL_HIGH>;  /* WL_HOST_WAKE = GPIO2_IO20 active high. Change to IRQ_TYPE_EDGE_RISING for 1BW and SN8000. */
 		interrupt-names = "host-wake";
+		brcm,broken_sg_support;
+		brcm,sd_sgentry_align =/bits/ 16 <16>;
 	};
 };
 /*

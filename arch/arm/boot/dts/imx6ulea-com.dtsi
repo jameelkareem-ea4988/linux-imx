@@ -168,7 +168,7 @@
 			};
 
 			vgen3_reg: vccsd {
-				regulator-min-microvolt = <1800000>;
+				regulator-min-microvolt = <1800000>; /* Murata: LDO for SD1 slot */
 				regulator-max-microvolt = <3300000>;
 				regulator-always-on;
 			};
@@ -215,7 +215,8 @@
 		pinctrl_hog_1: hoggrp-1 {
 			fsl,pins = <
 				MX6UL_PAD_LCD_RESET__WDOG1_WDOG_ANY    0x30b0
-				MX6UL_PAD_GPIO1_IO05__USDHC1_VSELECT	0x17059 /* SD1 VSELECT */
+				MX6UL_PAD_GPIO1_IO05__GPIO1_IO05	0x03029 /* SD1 VSELECT -- 100K pulldown; default 3.3V VIO */
+				MX6UL_PAD_GPIO1_IO02__GPIO1_IO02	0x03029	/* Murata - BT_HOST_WAKE; 100K pulldown */
 				MX6UL_PAD_GPIO1_IO09__GPIO1_IO09        0x17059 /* SD1 RESET */
 				MX6UL_PAD_SNVS_TAMPER1__GPIO5_IO01      0x17059 /* CAN Regulator */
 			>;
