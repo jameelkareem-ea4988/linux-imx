@@ -1827,10 +1827,10 @@ static int pci_imx_suspend_noirq(struct device *dev)
 				IMX6Q_GPR1_PCIE_TEST_PD,
 				IMX6Q_GPR1_PCIE_TEST_PD);
 	} 
-	else if (imx6_pcie->variant == IMX7D)
+	else if (imx_pcie->variant == IMX7D)
 	{
  			/* turn off external osc input */
- 			regmap_update_bits(imx6_pcie->iomuxc_gpr, IOMUXC_GPR12,
+ 			regmap_update_bits(imx_pcie->iomuxc_gpr, IOMUXC_GPR12,
 					BIT(5), 0);
 	}
 	else {
